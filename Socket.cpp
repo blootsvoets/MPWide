@@ -194,7 +194,6 @@ bool Socket::send ( const char* s, size_t size ) const
     else { count = 0; }
     if(count>5) {
       cerr << "Send timeout: " << errno << " / " << strerror(errno) << endl;
-      count = 0;
       break;
     }
   }
@@ -343,7 +342,8 @@ bool Socket::connect ( const string host, const int port )
   m_addr.sin_port = htons ( port );
   int status = inet_pton ( AF_INET, host.c_str(), &m_addr.sin_addr );
 
-  if ( errno == EAFNOSUPPORT ) return false;
+  // -1: error; 0: unparsable
+  if (status < 1 ) return false;
 //  status = ::connect ( m_sock, ( sockaddr * ) &m_addr, sizeof ( m_addr ) );
 
   set_non_blocking(true);
