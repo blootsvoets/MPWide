@@ -41,11 +41,11 @@ int MPW_CreatePath(string host, int server_side_base_port, int num_streams);
 // Return 0 on success (negative on failure).
 int MPW_DestroyPath(int path);
 
-void MPW_Send(char* sendbuf, long long int sendsize, int path);
-void MPW_Recv(char* recvbuf, long long int recvsize, int path);
-void MPW_SendRecv(char* sendbuf, long long int sendsize, char* recvbuf, long long int recvsize, int path);
+void MPW_Send(char* sendbuf, size_t sendsize, int path);
+void MPW_Recv(char* recvbuf, size_t recvsize, int path);
+void MPW_SendRecv(char* sendbuf, size_t sendsize, char* recvbuf, size_t recvsize, int path);
 // returns the size of the newly received data. 
-int MPW_DSendRecv(char* sendbuf, long long int sendsize, char* recvbuf, long long int maxrecvsize, int path);
+ssize_t MPW_DSendRecv(char* sendbuf, size_t sendsize, char* recvbuf, size_t maxrecvsize, int path);
 
 
 /* Initialize MPWide. */
@@ -68,29 +68,29 @@ void MPW_ReOpenChannels(int* channels, int num_channels);
 int MPW_Finalize();
 
 /* Perform this using multiple channels. */
-void MPW_PSendRecv(char** sendbuf, long long int* sendsize, char** recvbuf, long long int* recvsize, int* channel, int num_channels);
-void MPW_SendRecv ( char* sendbuf, long long int  sendsize, char*  recvbuf, long long int  recvsize, int* channel, int num_channels);
+void MPW_PSendRecv(char** sendbuf, size_t* sendsize, char** recvbuf, size_t* recvsize, int* channel, int num_channels);
+void MPW_SendRecv ( char* sendbuf, size_t  sendsize, char*  recvbuf, size_t  recvsize, int* channel, int num_channels);
 
 /* Dynamically-sized message exchanges. */
-long long int MPW_DSendRecv(char* sendbuf, long long int sendsize, char* recvbuf, long long int maxrecvsize, int* channel, int num_channels);
+ssize_t MPW_DSendRecv(char* sendbuf, size_t sendsize, char* recvbuf, size_t maxrecvsize, int* channel, int num_channels);
 
 /* Message relaying/forwarding for communication nodes. */
 void MPW_Relay(int* channels, int* channels2, int num_channels);
 
 /* Send data, receive nothing. */
-void MPW_Send(char* buf, long long int size, int* channels, int num_channels);
+void MPW_Send(char* buf, size_t size, int* channels, int num_channels);
 
 /* Receive data. Will not return until the data is received. */
-void MPW_Recv(char* buf, long long int size, int* channels, int num_channels);
+void MPW_Recv(char* buf, size_t size, int* channels, int num_channels);
 
 /* Recv from one set of channels. Send out through the other set. */
-long long int MPW_DCycle(char* sendbuf, long long int sendsize, char* recvbuf, long long int recvsize,
+ssize_t MPW_DCycle(char* sendbuf, size_t sendsize, char* recvbuf, size_t recvsize,
              int* ch_send, int num_ch_send, int* ch_recv, int num_ch_recv);
-void MPW_Cycle(char* sendbuf, long long int sendsize, char* recvbuf, long long int recvsize,
+void MPW_Cycle(char* sendbuf, size_t sendsize, char* recvbuf, size_t recvsize,
              int* ch_send, int num_ch_send, int* ch_recv, int num_ch_recv);
 
 /* Simple buffer splitting function. Handy for PSendRecv calls. */
-void MPW_splitBuf(char* buf, long long int bsize, int num_chunks, char** split_buf, long long int* chunk_sizes);
+void MPW_splitBuf(char* buf, size_t bsize, int num_chunks, char** split_buf, size_t* chunk_sizes);
 
 /* Synchronyze two processes on one stream. 
  * TODO: Implement collective barrier which operates on all streams simultaneously. */
@@ -100,7 +100,7 @@ void MPW_Barrier(int channel);
 void MPW_setChunkSize(int sending, int receiving);
 
 /* Non-blocking functionalities. */
-int MPW_ISendRecv( char* sendbuf, long long int sendsize, char* recvbuf, long long int recvsize, int path);
+int MPW_ISendRecv( char* sendbuf, size_t sendsize, char* recvbuf, size_t recvsize, int path);
 bool MPW_Has_NBE_Finished(int NBE_id);
 void MPW_Wait(int NBE_id);
 
@@ -114,8 +114,8 @@ void   MPW_setPacingRate(double rate);
 extern "C" {
   void MPW_Init_c (char** url, int* ports, int numsockets); 
   void MPW_Init1_c (char* url, int port);
-  void MPW_SendRecv1_c (char* sendbuf, long long int sendsize, char* recvbuf, long long int recvsize, int base_channel);
-  void MPW_SendRecv_c (char* sendbuf, long long int sendsize, char* recvbuf, long long int recvsize, int* base_channel, int num_channels);
-  void MPW_PSendRecv_c(char** sendbuf, long long int* sendsize, char** recvbuf, long long int* recvsize, int* channel, int num_channels);
+  void MPW_SendRecv1_c (char* sendbuf, size_t sendsize, char* recvbuf, size_t recvsize, int base_channel);
+  void MPW_SendRecv_c (char* sendbuf, size_t sendsize, char* recvbuf, size_t recvsize, int* base_channel, int num_channels);
+  void MPW_PSendRecv_c(char** sendbuf, size_t* sendsize, char** recvbuf, size_t* recvsize, int* channel, int num_channels);
 }
 

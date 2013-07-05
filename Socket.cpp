@@ -155,7 +155,7 @@ bool Socket::accept ( Socket& new_socket ) const
 }
 
 
-bool Socket::send ( const char* s, long long int size ) const
+bool Socket::send ( const char* s, size_t size ) const
 {
   struct timeval timeout;
   timeout.tv_sec = 10;
@@ -201,7 +201,7 @@ bool Socket::send ( const char* s, long long int size ) const
 
   int bytes_sent = 0;
   while(bytes_sent < size) {
-    int status = ::send ( m_sock, s+bytes_sent, size-bytes_sent, tcp_send_flag );
+    ssize_t status = ::send ( m_sock, s+bytes_sent, size-bytes_sent, tcp_send_flag );
     if ( status == -1 ) {
       cerr << "Socket.send error. Details: " << errno << "/"<< strerror(errno) << endl;
       return false;
@@ -212,7 +212,7 @@ bool Socket::send ( const char* s, long long int size ) const
 }
 
 
-int Socket::recv ( char* s, long long int size ) const
+ssize_t Socket::recv ( char* s, size_t size ) const
 {
   struct timeval timeout;
   timeout.tv_sec = 10;
@@ -254,7 +254,7 @@ int Socket::recv ( char* s, long long int size ) const
     }
   }
 
-  int status = ::recv ( m_sock, s, size, 0 );
+  ssize_t status = ::recv ( m_sock, s, size, 0 );
 
   if ( status < 0 ) {
     cout << "status == " << status << " errno == " << errno << "  in Socket::recv\n";
@@ -270,9 +270,9 @@ int Socket::recv ( char* s, long long int size ) const
   }
 }
 
-int Socket::irecv ( char* s, long long int size ) const
+ssize_t Socket::irecv ( char* s, size_t size ) const
 {
-  int status = ::recv ( m_sock, s, size, 0 );
+  ssize_t status = ::recv ( m_sock, s, size, 0 );
   if ( status < 0 ) {
     cout << "irecv: status = " << status << " errno = " << errno << "/" << strerror(errno) << endl;
     return 0;
@@ -281,9 +281,9 @@ int Socket::irecv ( char* s, long long int size ) const
   return status;
 }
 
-int Socket::isend ( const char* s, long long int size ) const
+ssize_t Socket::isend ( const char* s, size_t size ) const
 {
-  int status = ::send ( m_sock, s, size, tcp_send_flag );
+  ssize_t status = ::send ( m_sock, s, size, tcp_send_flag );
   if ( status < 0 ) {
     cerr << "isend: status = " << status << " errno = " << errno << "/"<< strerror(errno) << endl;
     exit(-1);

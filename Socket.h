@@ -50,12 +50,12 @@ class Socket
   bool connect ( const std::string host, const int port );
 
   // Data Transimission
-  bool send (const char* s, long long int size ) const;
-  int recv (char* s, long long int size ) const;
+  bool send (const char* s, size_t size ) const;
+  ssize_t recv (char* s, size_t size ) const;
 
   // Light-weight, non-blocking
-  int isend (const char* s, long long int size ) const;
-  int irecv (char* s, long long int size ) const;
+  ssize_t isend (const char* s, size_t size ) const;
+  ssize_t irecv (char* s, size_t size ) const;
 
   // Check if the socket is readable / writable. Timeout is 2 minutes.
   int select_me (int mask) const;

@@ -149,8 +149,8 @@ static int relay_rsize = 8*1024;
 #endif
 
 typedef struct thread_tmp{
-  long long int sendsize, recvsize;
-  long long int* dyn_recvsize; //For DynEx.
+  size_t sendsize, recvsize;
+  size_t* dyn_recvsize; //For DynEx.
   int thread_id;
   int channel;
   int numchannels;
@@ -266,7 +266,7 @@ int MPW_NumChannels(){
   return num_streams;
 }
 
-long long int bytes_sent;
+size_t bytes_sent;
 bool stop_monitor = false;
 
 #ifdef PERF_TIMING
@@ -276,9 +276,9 @@ void *MPW_TBandwidth_Monitor(void *args)
 {
   ofstream myfile;
   myfile.open("bandwidth_monitor.txt");
-  long long int old_bytes_sent = 0;
-  long long int cur_bytes_sent = 0;
-  long long int old_time = 0;
+  size_t old_bytes_sent = 0;
+  size_t cur_bytes_sent = 0;
+  size_t old_time = 0;
   
   while(!stop_monitor) {
     if(old_time != int(GetTime())) {
@@ -570,22 +570,23 @@ int MPW_DestroyPath(int path) {
     DecrementStreamIndices(i);
   }
   paths.erase(paths.begin()+path);
+  return 0;
 }
 
 /* Path-based Send and Recv operations*/
-int MPW_DSendRecv(char* sendbuf, long long int sendsize, char* recvbuf, long long int maxrecvsize, int path) {
+ssize_t MPW_DSendRecv(char* sendbuf, size_t sendsize, char* recvbuf, size_t maxrecvsize, int path) {
   return MPW_DSendRecv(sendbuf, sendsize, recvbuf, maxrecvsize, paths[path].streams, paths[path].num_streams);
 }
 
-void MPW_SendRecv(char* sendbuf, long long int sendsize, char* recvbuf, long long int recvsize, int path) {
+void MPW_SendRecv(char* sendbuf, size_t sendsize, char* recvbuf, size_t recvsize, int path) {
   MPW_SendRecv(sendbuf, sendsize, recvbuf, recvsize,  paths[path].streams, paths[path].num_streams);
 }
 
-void MPW_Send(char* sendbuf, long long int sendsize, int path) {
+void MPW_Send(char* sendbuf, size_t sendsize, int path) {
   MPW_SendRecv(sendbuf, sendsize, MPW_EMPTY, 1, paths[path].streams, paths[path].num_streams);
 }
 
-void MPW_Recv(char* recvbuf, long long int recvsize, int path) {
+void MPW_Recv(char* recvbuf, size_t recvsize, int path) {
   MPW_SendRecv(MPW_EMPTY, 1, recvbuf, recvsize,  paths[path].streams, paths[path].num_streams);
 }
 
@@ -654,26 +655,26 @@ int MPW_Finalize()
 
 
 /* Wrapping function for SendRecv in case no receiving is required. */
-void MPW_Send(char* sendbuf, long long int size, int* channels, int num_channels)
+void MPW_Send(char* sendbuf, size_t size, int* channels, int num_channels)
 {
   MPW_SendRecv(sendbuf,size,MPW_EMPTY,1,channels,num_channels);
 }
 
-void MPW_Recv(char* buf, long long int size, int* channels, int num_channels)
+void MPW_Recv(char* buf, size_t size, int* channels, int num_channels)
 {
   MPW_SendRecv(MPW_EMPTY,1,buf,size,channels,num_channels);
 }
 
 /* Send/Recv between two processes. */
-void InThreadSendRecv(char* sendbuf, long long int sendsize, char* recvbuf, long long int recvsize, int base_channel)
+void InThreadSendRecv(char* sendbuf, size_t sendsize, char* recvbuf, size_t recvsize, int base_channel)
 {
 
 #ifdef PERF_TIMING
   double t = GetTime();
 #endif
 
-  long long int a = 0;
-  long long int b = 0;
+  size_t a = 0;
+  size_t b = 0;
 
   int channel = base_channel % 65536;
   int channel2 = channel;
@@ -694,7 +695,7 @@ void InThreadSendRecv(char* sendbuf, long long int sendsize, char* recvbuf, long
 
     if(!rdone && (mode%2==1)) {
       if((recvsize-b)) {
-        int n = client[channel2].irecv(recvbuf+b,min(tcpbuf_rsize,recvsize-b)); 
+        ssize_t n = client[channel2].irecv(recvbuf+b,min(tcpbuf_rsize,recvsize-b));
         b += n;
 	    #if MONITORING == 1
 	    bytes_sent += n;
@@ -708,7 +709,7 @@ void InThreadSendRecv(char* sendbuf, long long int sendsize, char* recvbuf, long
 
     if(!wdone && (mode/2==1)) {
       if(sendsize-a) {
-        int n = client[channel].isend(sendbuf+a,min(tcpbuf_ssize,sendsize-a)); 
+        ssize_t n = client[channel].isend(sendbuf+a,min(tcpbuf_ssize,sendsize-a)); 
 
         a += n;
         #if MONITORING == 1
@@ -748,10 +749,10 @@ void* MPW_Relay(void* args)
 
   int mode  = 0;
   int mode2 = 0;
-  long long int n     = 0;
-  long long int ns    = 0;
-  long long int n2    = 0;
-  long long int ns2   = 0;
+  size_t n     = 0;
+  size_t ns    = 0;
+  size_t n2    = 0;
+  size_t ns2   = 0;
 
   int   channel  = r->channel;
   int   channel2 = r->channel2;
@@ -766,7 +767,7 @@ void* MPW_Relay(void* args)
   #if PERF_REPORT > 1
   cout << "Starting Relay Channel #" << channel << endl;
   #endif
-  int tmp = 0;
+  ssize_t tmp = 0;
 
   while(1) {
 
@@ -867,10 +868,10 @@ void *MPW_TDynEx(void *args)
   if (ta->channel > 65535) { cycling = true; }
 
   char * sendbuf = ta->sendbuf;
-  long long int totalsendsize = ta->sendsize;
-  long long int recvsize = ta->recvsize;
+  size_t totalsendsize = ta->sendsize;
+  size_t recvsize = ta->recvsize;
   // Maximum size permitted for message.
-  long long int maxrecvsize = recvsize;
+  size_t maxrecvsize = recvsize;
   char* recvbuf = ta->recvbuf;
   int channel = ta->channel % 65536; //send channel
 
@@ -882,10 +883,10 @@ void *MPW_TDynEx(void *args)
   }
 
   int id = ta->thread_id;
-  long long int numschannels = ta->numchannels;
-  long long int numrchannels = ta->numrchannels;
+  int numschannels = ta->numchannels;
+  int numrchannels = ta->numrchannels;
 
-  long long int sendsize = totalsendsize / numschannels;
+  size_t sendsize = totalsendsize / numschannels;
   if(id < (totalsendsize % numschannels)) {
     sendsize++;
   }
@@ -895,17 +896,15 @@ void *MPW_TDynEx(void *args)
   #endif
 
   unsigned char net_size_found[8], net_send_size[8];
-  long long int recvsizeall = -1;
-  size_t a, b;
-  long long int c,d;
-  a = b = 0;
-  c = d = 0;
+  ssize_t recvsizeall = -1;
+  size_t a, b, c, d;
+  a = b = c = d = 0;
 
-  // recvsize is initially set to the size of the long long int which holds the message size.
+  // recvsize is initially set to the size of the size_t which holds the message size.
   bool recv_settings_known = false;   //this thread knows how much data may be received.
   int mask = 0;
   int mode = 0;
-  long long int offset_r = 0; //stores correct recv buffer offset for this thread.
+  size_t offset_r = 0; //stores correct recv buffer offset for this thread.
 
   /* Second: await the recvsize */
 //  if(id < numrchannels) {
@@ -918,7 +917,7 @@ void *MPW_TDynEx(void *args)
     /* (1.) Receiving is possible, but only done by thread 0 until we know more. */
     if(mode%2 == 1) {
       if(!recv_settings_known) {
-        int n = client[channel2].irecv((char *)net_size_found+b,8-b);
+        ssize_t n = client[channel2].irecv((char *)net_size_found+b,8-b);
         b += n;
 
         if(b == 8) { //recvsize data is now available.
@@ -950,7 +949,7 @@ void *MPW_TDynEx(void *args)
         }
       } 
       else {
-        int n = client[channel2].irecv(recvbuf+d,min(tcpbuf_rsize,recvsize-d));
+        ssize_t n = client[channel2].irecv(recvbuf+d,min(tcpbuf_rsize,recvsize-d));
         d += n;
         #if MONITORING == 1
         bytes_sent += n;
@@ -963,11 +962,11 @@ void *MPW_TDynEx(void *args)
     if(mode/2==1) {
       if(a<8) { //send size first.
         ::serialize_size_t(net_send_size, (const size_t)totalsendsize);
-        int n = client[channel].isend((char*)net_send_size + a,8-a);
+        ssize_t n = client[channel].isend((char*)net_send_size + a,8-a);
         a += n;
       }
       else { //send data after that, leave 16byte margin to prevent SendRecv from crashing.
-        int n = client[channel].isend(sendbuf+c,min(tcpbuf_ssize,sendsize-c)); 
+        ssize_t n = client[channel].isend(sendbuf+c,min(tcpbuf_ssize,sendsize-c));
         c += n;
         #if MONITORING == 1
         bytes_sent += n;
@@ -1000,21 +999,21 @@ void *MPW_TSendRecv(void *args)
  * The size is first read by the receiving process, which then reads in the
  * appopriate amount of memory.
  * The actual size of the received data in each stream is stored in recvsize, 
- * whereas the total size is returned as a long long int.
+ * whereas the total size is returned as a ssize_t.
  *
  * Note: DSendRecv assumes that sendbuf has been split into equal-sized chunks by
  * using MPW_splitBuf in this file. If the splitting is non-equal for some reason, 
  * this function will hang.
  * */
 
-long long int DSendRecv(char** sendbuf, long long int totalsendsize, char* recvbuf, long long int maxrecvsize, int* channel, int num_channels) {
+ssize_t DSendRecv(char** sendbuf, size_t totalsendsize, char* recvbuf, size_t maxrecvsize, int* channel, int num_channels) {
 #ifdef PERF_TIMING
   double t = GetTime();
 #endif
   //cout << sendbuf[0] << " / " << recvbuf[0] << " / " << num_channels << " / " << sendsize[0] << " / " << recvsize[0] << " / " << channel[0] << endl;
 
   pthread_t streams[num_channels];
-  long long int dyn_recvsize = 0;
+  size_t dyn_recvsize = 0;
 
   for(int i=0; i<num_channels; i++){
       ta[channel[i]].sendsize = totalsendsize;
@@ -1044,7 +1043,7 @@ long long int DSendRecv(char** sendbuf, long long int totalsendsize, char* recvb
   t = GetTime() - t;
   
   #if PERF_REPORT>0
-  long long int total_size = totalsendsize + dyn_recvsize;
+  size_t total_size = totalsendsize + dyn_recvsize;
 
   cout << "DSendRecv: " << t << "s. Size: " << (total_size/(1024*1024)) << "MB. Rate: " << total_size/(t*1024*1024) << "MB/s." << endl;
   #endif
@@ -1059,7 +1058,7 @@ long long int DSendRecv(char** sendbuf, long long int totalsendsize, char* recvb
 /* buf,bsize and num_chunks contain parameters.
  * split_buf and chunksizes are placeholders for the splitted buffer and its properties. */
 //TODO: Introduce a split in 4096-byte chunks using an ifdef mechanism?
-void MPW_splitBuf(char* buf, long long int bsize, int num_chunks, char** split_buf, long long int* chunk_sizes) {
+void MPW_splitBuf(char* buf, size_t bsize, int num_chunks, char** split_buf, size_t* chunk_sizes) {
 
   if(num_chunks < 1) { 
     LOG_ERR("ERROR: MPW_splitBuf is about to split into 0 chunks.")
@@ -1080,15 +1079,15 @@ void MPW_splitBuf(char* buf, long long int bsize, int num_chunks, char** split_b
 }
 
 /* Split streams and exchange the message using dynamic sizing. */
-long long int MPW_DSendRecv( char *sendbuf, long long int sendsize,
-                char *recvbuf, long long int maxrecvsize,
+ssize_t MPW_DSendRecv( char *sendbuf, size_t sendsize,
+                char *recvbuf, size_t maxrecvsize,
                 int *channel, int nc){
 
   char **sendbuf2 = new char*[nc];
-  long long int *sendsize2 = new long long int[nc];
+  size_t *sendsize2 = new size_t[nc];
 
   MPW_splitBuf(sendbuf,sendsize,nc,sendbuf2,sendsize2);
-  long long int total_recv_size = DSendRecv( sendbuf2, sendsize, recvbuf, maxrecvsize, channel, nc);
+  ssize_t total_recv_size = DSendRecv( sendbuf2, sendsize, recvbuf, maxrecvsize, channel, nc);
 
   delete [] sendbuf2;
   delete [] sendsize2;
@@ -1096,7 +1095,7 @@ long long int MPW_DSendRecv( char *sendbuf, long long int sendsize,
 }
 
 /* Low-level command */
-long long int Cycle(char** sendbuf2, long long int sendsize2, char* recvbuf2, long long int maxrecvsize2, int* ch_send, int nc_send, int* ch_recv, int nc_recv, bool dynamic) {
+ssize_t Cycle(char** sendbuf2, size_t sendsize2, char* recvbuf2, size_t maxrecvsize2, int* ch_send, int nc_send, int* ch_recv, int nc_recv, bool dynamic) {
   #ifdef PERF_TIMING
   double t = GetTime();
   #endif
@@ -1104,9 +1103,9 @@ long long int Cycle(char** sendbuf2, long long int sendsize2, char* recvbuf2, lo
   char dummy_recv[nc_recv];
   char dummy_send[nc_send][1];
 
-  long long int totalsendsize = sendsize2;
-  long long int dyn_recvsize_sendchannel = 0; 
-  long long int recv_offset = 0; //only if !dynamic
+  size_t totalsendsize = sendsize2;
+  size_t dyn_recvsize_sendchannel = 0; 
+  size_t recv_offset = 0; //only if !dynamic
 
   //TODO: Add support for different number of send/recv streams.
   for(int i=0; i<max(nc_send,nc_recv); i++){
@@ -1186,7 +1185,7 @@ long long int Cycle(char** sendbuf2, long long int sendsize2, char* recvbuf2, lo
   t = GetTime() - t;
 
     #if PERF_REPORT>0
-      long long int total_size = sendsize2 + dyn_recvsize_recvchannel;
+      size_t total_size = sendsize2 + dyn_recvsize_recvchannel;
       cout << "Cycle: " << t << "s. Size: " << (total_size/(1024*1024)) << "MB. Rate: " << total_size/(t*1024*1024) << "MB/s." << endl;
     #endif
     SendRecvTime += t;
@@ -1197,7 +1196,7 @@ long long int Cycle(char** sendbuf2, long long int sendsize2, char* recvbuf2, lo
 }
 
 /* Recv from one set of channels. Send through to another set of channels. */
-long long int MPW_Cycle(char* sendbuf, long long int sendsize, char* recvbuf, long long int maxrecvsize,
+ssize_t MPW_Cycle(char* sendbuf, size_t sendsize, char* recvbuf, size_t maxrecvsize,
              int* ch_send, int num_ch_send, int* ch_recv, int num_ch_recv, bool dynamic) 
 {
   #if SendRecvInputReport == 1
@@ -1225,30 +1224,30 @@ long long int MPW_Cycle(char* sendbuf, long long int sendsize, char* recvbuf, lo
   }
 //  cout << "MPW_Cycle: " << sendsize << "/" << maxrecvsize << "/" << ch_send[0] << "/" << num_ch_send << "/" << ch_recv[0] << "/" << num_ch_recv << endl;
   char **sendbuf2 = new char*[num_ch_send];
-  long long int *sendsize2    = new long long int[num_ch_send]; //unused by Cycle.
+  size_t *sendsize2    = new size_t[num_ch_send]; //unused by Cycle.
 
   MPW_splitBuf( sendbuf, sendsize, num_ch_send, sendbuf2, sendsize2);
 
-  long long int total_recv_size = Cycle( sendbuf2, sendsize, recvbuf, maxrecvsize, ch_send, num_ch_send, ch_recv, num_ch_recv, dynamic);
+  size_t total_recv_size = Cycle( sendbuf2, sendsize, recvbuf, maxrecvsize, ch_send, num_ch_send, ch_recv, num_ch_recv, dynamic);
 
   delete [] sendbuf2;
   delete [] sendsize2;
   return total_recv_size;
 }
 
-long long int MPW_DCycle(char* sendbuf, long long int sendsize, char* recvbuf, long long int maxrecvsize,
+ssize_t MPW_DCycle(char* sendbuf, size_t sendsize, char* recvbuf, size_t maxrecvsize,
              int* ch_send, int num_ch_send, int* ch_recv, int num_ch_recv)
 {
   return MPW_Cycle(sendbuf, sendsize, recvbuf, maxrecvsize, ch_send, num_ch_send, ch_recv, num_ch_recv, true);
 }
 
-void MPW_Cycle(char* sendbuf, long long int sendsize, char* recvbuf, long long int maxrecvsize,
+void MPW_Cycle(char* sendbuf, size_t sendsize, char* recvbuf, size_t maxrecvsize,
              int* ch_send, int num_ch_send, int* ch_recv, int num_ch_recv)
 {
   MPW_Cycle(sendbuf, sendsize, recvbuf, maxrecvsize, ch_send, num_ch_send, ch_recv, num_ch_recv, false);
 }
 
-void MPW_PSendRecv(char** sendbuf, long long int* sendsize, char** recvbuf, long long int* recvsize, int* channel, int num_channels)
+void MPW_PSendRecv(char** sendbuf, size_t* sendsize, char** recvbuf, size_t* recvsize, int* channel, int num_channels)
 {
 #ifdef PERF_TIMING
   double t = GetTime();
@@ -1281,7 +1280,7 @@ void MPW_PSendRecv(char** sendbuf, long long int* sendsize, char** recvbuf, long
     t = GetTime() - t;
 
     #if PERF_REPORT>0
-      long long int total_size = 0;
+      size_t total_size = 0;
       for(int i=0;i<num_channels;i++) {
         total_size += sendsize[i]+recvsize[i];
       }
@@ -1291,7 +1290,7 @@ void MPW_PSendRecv(char** sendbuf, long long int* sendsize, char** recvbuf, long
   #endif
 }
 
-void MPW_SendRecv( char* sendbuf, long long int sendsize, char* recvbuf, long long int recvsize, int* channel, int nc){
+void MPW_SendRecv( char* sendbuf, size_t sendsize, char* recvbuf, size_t recvsize, int* channel, int nc){
 
 #if SendRecvInputReport == 1
   cout << "MPW_SendRecv(sendsize=" << sendsize << ",recvsize=" << recvsize << ",nc=" << nc << ");" << endl;
@@ -1308,8 +1307,8 @@ void MPW_SendRecv( char* sendbuf, long long int sendsize, char* recvbuf, long lo
 
   char **sendbuf2 = new char*[nc];
   char **recvbuf2 = new char*[nc];
-  long long int *sendsize2 = new long long int[nc];
-  long long int *recvsize2 = new long long int[nc];
+  size_t *sendsize2 = new size_t[nc];
+  size_t *recvsize2 = new size_t[nc];
   
   size_t offset = 0;
   size_t offset2 = 0;
@@ -1384,15 +1383,15 @@ void MPW_Barrier() {
 
 /* C interface */
 extern "C" { 
-  void MPW_SendRecv1_c (char* sendbuf, long long int sendsize, char* recvbuf, long long int recvsize, int base_channel) {
+  void MPW_SendRecv1_c (char* sendbuf, size_t sendsize, char* recvbuf, size_t recvsize, int base_channel) {
     //string urls(url)
     MPW_SendRecv(sendbuf, sendsize, recvbuf, recvsize, base_channel);
   }
-  void MPW_SendRecv_c (char* sendbuf, long long int sendsize, char* recvbuf, long long int recvsize, int* base_channel, int num_channels) {
+  void MPW_SendRecv_c (char* sendbuf, size_t sendsize, char* recvbuf, size_t recvsize, int* base_channel, int num_channels) {
     //string urls(url)
     MPW_SendRecv(sendbuf, sendsize, recvbuf, recvsize, base_channel, num_channels);
   }
-  void MPW_PSendRecv_c(char** sendbuf, long long int* sendsize, char** recvbuf, long long int* recvsize, int* channel, int num_channels) {
+  void MPW_PSendRecv_c(char** sendbuf, size_t* sendsize, char** recvbuf, size_t* recvsize, int* channel, int num_channels) {
     MPW_PSendRecv(sendbuf, sendsize, recvbuf, recvsize, channel, num_channels);
   }
 }
@@ -1437,7 +1436,7 @@ void *MPW_TSendRecv_Full(void *args)
 }
 
 
-int MPW_ISendRecv( char* sendbuf, long long int sendsize, char* recvbuf, long long int recvsize, int path) {
+int MPW_ISendRecv( char* sendbuf, size_t sendsize, char* recvbuf, size_t recvsize, int path) {
   MPW_NBE new_nonblocking_exchange = MPW_NBE();
   new_nonblocking_exchange.NBE_args = thread_tmp();
   new_nonblocking_exchange.NBE_args.sendbuf = sendbuf;
