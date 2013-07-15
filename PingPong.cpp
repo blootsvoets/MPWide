@@ -7,7 +7,7 @@
 
 using namespace std;
 
-#define ACT_AS_SERVER
+//#define ACT_AS_SERVER
 
 #include "MPWide.h"
 

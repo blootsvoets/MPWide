@@ -2,7 +2,7 @@
 
 export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:."
 
-TARGET=login02.sm-gw.lrz.de
+TARGET=129.187.11.193
 echo "MPWPingPong $TARGET $1 $2 <kiB>"
 
 for ((I=1; $I < 67000; I=$I*2)); do
