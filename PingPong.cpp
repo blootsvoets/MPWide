@@ -33,7 +33,6 @@ int main(int argc, char** argv)
 
   if(argc>5)
     MPW_setPacingRate(atoi(argv[5])*1024*1024);
-
   
   int path_id = MPW_CreatePathWithoutConnect(host, 20506, num_channels);
 #ifdef ACT_AS_SERVER
@@ -53,11 +52,11 @@ int main(int argc, char** argv)
     /* test loop */
     for(int i=0; i<repeat; i++) {
 #ifdef ACT_AS_SERVER
-      MPW_SendRecv(&msg2,1,msg,len,path_id); ///path version
       MPW_SendRecv(msg,len,&msg2,1,path_id); ///path version
+      MPW_SendRecv(&msg2,1,msg,len,path_id); ///path version
 #else
-      MPW_SendRecv(msg,len,&msg2,1,path_id); ///path version
       MPW_SendRecv(&msg2,1,msg,len,path_id); ///path version
+      MPW_SendRecv(msg,len,&msg2,1,path_id); ///path version
 #endif
       cout << "End of iteration " << i << "." << endl;
     }
