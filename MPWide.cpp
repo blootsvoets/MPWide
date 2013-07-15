@@ -44,19 +44,19 @@ void MPW_setAutoTuning(bool b) {
 }
 
 /* Enable (define)/Disable(don't define) Performance Timing Measurements */
-#define PERF_TIMING
+//#define PERF_TIMING
 /* Performance report verbosity: 1 reports speeds on send/recv. 2 reports on initialization details.
    3 also reports number of steps taken to recv packages. 4 becomes ridiculously verbose, with e.g. 
    reports for accumulated bytes after every chunk is received. */
-#define PERF_REPORT 1
+#define PERF_REPORT 0
 #define LVL_ERR 0
 #define LVL_WARN 2
 #define LVL_INFO 4
 #define LVL_DEBUG 6
 #define LVL_TRACE 8
-#define MONITORING 1
+#define MONITORING 0
 
-#define LOG_LVL LVL_INFO
+#define LOG_LVL LVL_ERR
 
 #if LOG_LVL >= LVL_ERR
 #define LOG_ERR(MSG) cout << MSG << endl;
