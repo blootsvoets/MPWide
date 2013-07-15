@@ -38,11 +38,7 @@ int main(int argc, char** argv)
 #ifdef ACT_AS_SERVER
   MPW_ConnectPath(path_id, true); ///path version
 #else
-  {
-    int connected = 1;
-    while (connected != 0)
-      connected = MPW_ConnectPath(path_id, false); ///path version
-  }
+  MPW_ConnectPath(path_id, false); ///path version
 #endif
 
   if (argc > 6)
