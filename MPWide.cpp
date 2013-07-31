@@ -49,11 +49,11 @@ void MPW_setAutoTuning(bool b) {
    3 also reports number of steps taken to recv packages. 4 becomes ridiculously verbose, with e.g. 
    reports for accumulated bytes after every chunk is received. */
 #define PERF_REPORT 0
+
 #define LVL_ERR 0
 #define LVL_WARN 2
 #define LVL_INFO 4
 #define LVL_DEBUG 6
-#define LVL_TRACE 8
 #define MONITORING 0
 
 #define LOG_LVL LVL_ERR
@@ -79,9 +79,9 @@ void MPW_setAutoTuning(bool b) {
   #define LOG_DEBUG(MSG)
 #endif
 
-//#define MONITORING 1
 #define max(X,Y) ((X) > (Y) ? (X) : (Y))
 #define min(X,Y) ((X) < (Y) ? (X) : (Y))
+#define FLAG_CHECK(X, Y) (((X)&(Y)) == (Y))
 
 using namespace std;
 
@@ -96,7 +96,7 @@ static int num_streams = 0;
 
 // This is set to true on the first invocation of MPW_Init. MPW_EMPTY is given a 1-byte buffer.
 static bool MPW_INITIALISED = false;
-char *MPW_EMPTY;
+static char *MPW_EMPTY = new char[1];
 
 /* PATH-specific definitions */
 class MPWPath {
@@ -149,7 +149,7 @@ static int relay_rsize = 8*1024;
   }
 #endif
 
-typedef struct thread_tmp{
+typedef struct thread_tmp {
   long long int sendsize, recvsize;
   long long int* dyn_recvsize; //For DynEx.
   int thread_id;
@@ -224,51 +224,24 @@ char *MPW_DNSResolve(string host) {
   return MPW_DNSResolve(l_host);
 }
 
-int selectSockets(int wchannel, int rchannel, int mask)
+inline int selectSockets(int wchannel, int rchannel, int mask)
 /* Returns:
  0 if no access.
  1 if read on read channel.
  2 if write on write channel.
  3 if both. */
 {
-  int rsockp = client[rchannel].getSock();
-  int wsockp = client[wchannel].getSock();
-
-  /* args: FD_SETSIZE,writeset,readset,out-of-band sent, timeout*/
-  int ok = 0;
-  int access = 0;
-
-  fd_set rsock, wsock;
-  FD_ZERO(&rsock);
-  FD_ZERO(&wsock);
-  FD_SET(rsockp,&rsock); 
-  FD_SET(wsockp,&wsock);
-
-  struct timeval timeout;
-  timeout.tv_sec  = 10;
-  timeout.tv_usec = 0;
-
-  ok = select(max(rsockp,wsockp)+1, &rsock, &wsock, (fd_set *) 0, &timeout);
-  if(ok) {
-    if(mask%2 == 0) {
-      if(FD_ISSET(rsockp,&rsock)) { access++;    }
-    }
-    if(mask/2 == 0) {
-      if(FD_ISSET(wsockp,&wsock)) { access += 2; }
-    }
-  }
-  else if (ok<0){
-    LOG_ERR("socketSelect error: " << errno); //" Msg: " << strerror(errno));
-  }
-  return access;
+    return Socket_select(client[rchannel].getSock(), client[wchannel].getSock(), mask, 10, 0);
 }
 
 int MPW_NumChannels(){
   return num_streams;
 }
 
+#if MONITORING == 1
 long long int bytes_sent;
 bool stop_monitor = false;
+#endif
 
 #ifdef PERF_TIMING
 #if MONITORING == 1
@@ -297,7 +270,7 @@ void *MPW_TBandwidth_Monitor(void *args)
 #endif
 
 typedef struct init_tmp {
-  int i;
+  int stream;
   int port;
   int cport;
   bool server_wait;
@@ -307,63 +280,68 @@ typedef struct init_tmp {
 void* MPW_InitStream(void* args) 
 {
   init_tmp t = *((init_tmp *) args);
+  init_tmp *pt = ((init_tmp *) args);
 
-  int i = t.i;
+  int stream = t.stream;
   int port = t.port;
   int cport = t.cport;
   bool server_wait = t.server_wait;
-  client[i].set_non_blocking(false);
 
-  if(isclient[i]) {
-    client[i].create();
+  if(isclient[stream]) {
+    client[stream].create();
     /* Patch to bypass firewall problems. */
     if(cport>0) {
       #if PERF_REPORT > 1
-        cout << "[" << i << "] Trying to bind as client at " << (cport) << endl;
+        cout << "[" << stream << "] Trying to bind as client at " << (cport) << endl;
       #endif
-      int bound = client[i].bind(cport);
+      int bound = client[stream].bind(cport);
     }
 
     /* End of patch*/
-    t.connected = client[i].connect(remote_url[i],port);
-    #if InitStreamTimeOut > 0
-      long long connect_counter = 0;
-    #endif
-    if(server_wait == false && !t.connected) {
-      t.connected = client[i].connect(remote_url[i],port);
-      usleep(10000);
-      #if InitStreamTimeOut > 0
-        connect_counter += 10;
-        if(connect_counter >= InitStreamTimeOut) { break; }
-      #endif
+    pt->connected = client[stream].connect(remote_url[stream],port);
+    LOG_WARN("Server wait & connected " << server_wait << "," << pt->connected);
+
+    #if InitStreamTimeOut == 0
+    if (!server_wait) {
+      while(!pt->connected) {
+        usleep(50000);
+        pt->connected = client[stream].connect(remote_url[stream],port);
+      }
     }
+    #endif
+    
     #if PERF_REPORT > 1
-      cout << "[" << i << "] Attempt to connect as client to " << remote_url[i] <<" at port " << port <<  " :" << t.connected << endl;
+      cout << "[" << stream << "] Attempt to connect as client to " << remote_url[stream] <<" at port " << port <<  ": " << pt->connected << endl;
     #endif
   }
  
-  if(!t.connected) {
-    client[i].close();
-    if(server_wait) {
-      client[i].create();
-      int bound = client[i].bind(port);
-      #if PERF_REPORT > 1
-        cout << "[" << i << "] Trying to bind as server at " << (port) << ". Result = " << bound << endl;
-      #endif
+  if(!pt->connected) {
+    client[stream].close();
+    if (server_wait) {
+      client[stream].create();
 
-      if(bound > 0) {
-        while(!t.connected) {
-          client[i].listen();
-          t.connected = client[i].accept(client[i]);
-        }
-        #if PERF_REPORT > 1 
-          cout <<  "[" << i << "] Attempt to act as server: " << t.connected << endl;
-        #endif
-        if(t.connected) { isclient[i] = 0; } 
+      bool bound = client[stream].bind(port);
+      #if PERF_REPORT > 1
+        cout << "[" << stream << "] Trying to bind as server at " << (port) << ". Result = " << bound << endl;
+      #endif
+      
+      if (!bound) {
+        LOG_WARN("Bind on ch #"<< stream <<" failed.");
+        client[stream].close();
+        return NULL;
+      }
+
+      if (client[stream].listen()) {
+          pt->connected = client[stream].accept();
+          #if PERF_REPORT > 1
+          cout <<  "[" << stream << "] Attempt to act as server: " << pt->connected << endl;
+          #endif
+          if (pt->connected) { isclient[stream] = 0; }
       }
       else {
-        LOG_WARN("Bind on ch #"<< i <<" failed.");
-        client[i].close();
+        LOG_WARN("Listen on ch #"<< stream <<" failed.");
+        client[stream].close();
+        return NULL;
       }
     }
   }
@@ -376,9 +354,6 @@ void MPW_CloseChannels(int* channel, int numchannels)
   for(int i=0; i<numchannels; i++) {
     LOG_INFO("Closing channel #" << channel[i] << " with port = " << port[i] << " and cport = " << cport[i])
     client[channel[i]].close();
-    if(!isclient[channel[i]]) {
-      client[channel[i]].closeServer();
-    }
   }
 }
 
@@ -390,10 +365,11 @@ void MPW_ReOpenChannels(int* channel, int numchannels)
   init_tmp t[numchannels];
 
   for(int i = 0; i < numchannels; i++) {
-    t[i].i    = channel[i];
-    t[i].port = port[channel[i]];
-    t[i].cport = cport[channel[i]];
-    LOG_INFO("ReOpening client channel #" << channel[i] << " with port = " << port[channel[i]] << " and cport = " << cport[channel[i]])
+    int stream = channel[i];
+    t[i].stream    = stream;
+    t[i].port = port[stream];
+    t[i].cport = cport[stream];
+    LOG_INFO("ReOpening client channel #" << stream << " with port = " << port[stream] << " and cport = " << cport[stream])
     int code = pthread_create(&streams[i], NULL, MPW_InitStream, &t[i]);
   }
 
@@ -410,19 +386,20 @@ void MPW_AddStreams(string* url, int* ports, int* cports, int numstreams) {
     LOG_DEBUG("MPW_DNSResolve resolves " << url[i] << " to address " << MPW_DNSResolve(url[i]) << ".");
     remote_url.push_back(MPW_DNSResolve(url[i]));
     client.push_back(Socket());
-    isclient.push_back(1);
     port.push_back(ports[i]);
-    cport.push_back(cports[i]);
+    
+    if(url[i].compare("0") == 0 || url[i].compare("0.0.0.0") == 0) {
+      isclient.push_back(0);
+      cport.push_back(-1);
+      LOG_INFO("Empty IP address given: Switching to Server-only mode.")
+    } else {
+      isclient.push_back(1);
+      cport.push_back(cports[i]);
+    }
 
     #if PERF_REPORT > 1
       cout << url[i] << " " << ports[i] << " " << cports[i] << endl;
     #endif
-
-    if(url[i].compare("0") == 0 || url[i].compare("0.0.0.0") == 0) {
-      isclient[i] = 0;
-      cport[i]    = -2;
-      LOG_INFO("Empty IP address given: Switching to Server-only mode.")
-    }
   }
 }
 
@@ -431,9 +408,10 @@ int MPW_InitStreams(int *stream_indices, int numstreams, bool server_wait) {
   init_tmp t[numstreams];
 
   for(int i = 0; i < numstreams; i++) {
-    t[i].i    = stream_indices[i];
-    t[i].port = port[i];
-    t[i].cport = cport[i];
+    int stream = stream_indices[i];
+    t[i].stream     = stream;
+    t[i].port  = port[stream];
+    t[i].cport = cport[stream];
     t[i].server_wait = server_wait;
     t[i].connected = false;
     if(i>0) {
@@ -448,20 +426,21 @@ int MPW_InitStreams(int *stream_indices, int numstreams, bool server_wait) {
   }
 
   /* Error handling code (in case MPW_InitStream times out for one or more */
-  /*bool all_connected = true;
+  bool all_connected = true;
   for(int i = 0; i < numstreams; i++) {
     if(t[i].connected == false) {
+      LOG_WARN("One connection has failed: #" << stream_indices[i]);
       all_connected = false;
     }
   }
   if(!all_connected) {
     for(int i = 0; i < numstreams; i++) {
       if(t[i].connected == true) {
-        client[t[i].i].close();
+        client[stream_indices[i]].close();
       }
     }
     return -1;
-  }*/
+  }
 
   if(MPWideAutoTune == 1) {
     for(unsigned int i=0; i<paths.size(); i++) {
@@ -492,7 +471,7 @@ int MPW_InitStreams(int *stream_indices, int numstreams, bool server_wait) {
   LOG_INFO("-----------------------------------------------------------")
   LOG_INFO("END OF SETUP PHASE.")
 
-  if(MPW_INITIALISED == false) {
+  if (MPW_INITIALISED == false) {
     MPW_INITIALISED = true;
     #ifdef PERF_TIMING
     #if MONITORING == 1
@@ -510,13 +489,11 @@ int MPW_InitStreams(int *stream_indices, int numstreams, bool server_wait) {
 }
 
 /* Initialize the MPWide. set client to 1 for one machine, and to 0 for the other. */
-void MPW_Init(string* url, int* ports, int* cports, int numstreams)
+int MPW_Init(string* url, int* ports, int* cports, int numstreams)
 {
   #if PERF_REPORT > 0
     cout << "Initialising..." << endl;
   #endif
-
-  MPW_EMPTY = (char*) MPWmalloc(1); //construct 'empty' buffer.
 
   int stream_indices[numstreams];
   for(int i=0; i<numstreams; i++) {
@@ -524,7 +501,7 @@ void MPW_Init(string* url, int* ports, int* cports, int numstreams)
   }
 
   MPW_AddStreams(url, ports, cports, numstreams);
-  MPW_InitStreams(stream_indices, numstreams, true);
+  return MPW_InitStreams(stream_indices, numstreams, true);
 }
 
 /* Constructs a path. Return path id or negative error value. */
@@ -564,23 +541,26 @@ int MPW_CreatePathWithoutConnect(string host, int server_side_base_port, int str
 }
 
 int MPW_ConnectPath(int path_id, bool server_wait) {
-  MPW_InitStreams(paths[path_id].streams, paths[path_id].num_streams, server_wait);
-  return 0;
+  return MPW_InitStreams(paths[path_id].streams, paths[path_id].num_streams, server_wait);
 }
 
 /* Creates and connects a path */
 int MPW_CreatePath(string host, int server_side_base_port, int streams_in_path) {
 
   int path_id = MPW_CreatePathWithoutConnect(host, server_side_base_port, streams_in_path);
-  MPW_ConnectPath(path_id, true);
+  int status = MPW_ConnectPath(path_id, true);
+  if(status < 0) { 
+    MPW_DestroyPath(path_id);
+    return -1;
+  }
   return path_id;
 }
 
-void DecrementStreamIndices(int q) {
+void DecrementStreamIndices(int q, int len) {
   for(unsigned int i=0; i<paths.size(); i++) {
     for(int j=0; j<paths[i].num_streams; j++) {
       if(paths[i].streams[j] > q) { 
-        paths[i].streams[j]--; 
+        paths[i].streams[j] -= len;
       }
     }
   }
@@ -588,7 +568,7 @@ void DecrementStreamIndices(int q) {
 
 void EraseStream(int i) {
   port.erase(port.begin()+i);
-  cport.erase(port.begin()+i);
+  cport.erase(cport.begin()+i);
   isclient.erase(isclient.begin()+i);
   client.erase(client.begin()+i);
   remote_url.erase(remote_url.begin()+i);
@@ -606,13 +586,23 @@ void MPW_setPathWin(int path, int size) {
 }
 
 // Return 0 on success (negative on failure).
+// It assumes that the array of streams in a path is contiguous
 int MPW_DestroyPath(int path) {
-  MPW_CloseChannels(paths[path].streams, paths[path].num_streams);
-  for(int i=0; i < paths[path].num_streams; i++) {
-    EraseStream(paths[path].streams[i]);
-    DecrementStreamIndices(i);
-  }
+  const int len = paths[path].num_streams;
+  const int i = paths[path].streams[0];
+  const int end = i + len;
+  MPW_CloseChannels(paths[path].streams, len);
+  port.erase(port.begin()+i, port.begin()+end);
+  cport.erase(cport.begin()+i, cport.begin()+end);
+  isclient.erase(isclient.begin()+i, isclient.begin()+end);
+  client.erase(client.begin()+i, client.begin()+end);
+  remote_url.erase(remote_url.begin()+i, remote_url.begin()+end);
+  num_streams -= len;
+
+  DecrementStreamIndices(i, len);
+
   paths.erase(paths.begin()+path);
+  return 0;
 }
 
 /* Path-based Send and Recv operations*/
@@ -634,62 +624,55 @@ void MPW_Recv(char* recvbuf, long long int recvsize, int path) {
 
 
 /* Variant that does not require client port binding. */
-void MPW_Init(string* url, int* ports, int numstreams) 
+int MPW_Init(string* url, int* ports, int numstreams) 
 {
   int cports[numstreams];
 
   for(int i=0; i<numstreams; i++) {
     cports[i] = -1;
   }
-  MPW_Init(url, ports, cports, numstreams);
+  return MPW_Init(url, ports, cports, numstreams);
 }
 
 /* Shorthand initialization call for local processes that use a single stream. */
-void MPW_Init(string url, int port) {
+int MPW_Init(string url, int port) {
   string u1[1] = {url};
   int    p1[1] = {port};
-  MPW_Init(u1,p1,1);
+  return MPW_Init(u1,p1,1);
 }
 
 extern "C" {
-  void MPW_Init_c (char** url, int* ports, int numstreams) 
+  int MPW_Init_c (char** url, int* ports, int numstreams) 
   {
     string* urls = new string[numstreams];
     for(int i=0;i<numstreams;i++) {
       urls[i].assign(url[i]);
     }
-    MPW_Init(urls,ports,numstreams);
+    int status = MPW_Init(urls,ports,numstreams);
     delete [] urls;
+    return status;
   }
 
-  void MPW_Init1_c (char* url, int port)
+  int MPW_Init1_c (char* url, int port)
   {
-    MPW_Init(url, port);
+    return MPW_Init(url, port);
   }
-}
-
-/* Shorthand initialization call for inter-cluster single-stream usage. */
-void MPW_Init(string url) {
-  string u1[1] = {url};
-  int    p1[1] = {6000};
-  MPW_Init(u1,p1,1);
 }
 
 /* Close all sockets and free data structures related to the library. */
 int MPW_Finalize()
 {
+#if MONITORING == 1
   stop_monitor = true;
+#endif
   for(int i=0; i<num_streams; i++) {
     client[i].close();
-    if(!isclient[i]) {
-      client[i].closeServer();
-    }
   }
   #if PERFREPORT > 0
   cout << "MPWide sockets are closed." << endl;
   #endif
   free(ta); //clean global thread memory
-  free(MPW_EMPTY);
+  delete [] MPW_EMPTY;
   sleep(1);
   return 1;
 }
@@ -715,52 +698,41 @@ void InThreadSendRecv(char* sendbuf, long long int sendsize, char* recvbuf, long
   double t = GetTime();
 #endif
 
+  assert(sendsize > 0);
+  assert(recvsize > 0);
+
   long long int a = 0;
   long long int b = 0;
 
-  int channel = base_channel % 65536;
-  int channel2 = channel;
-  if(base_channel > 65535) {
-    channel2 = (base_channel/65536) - 1;
-    client[channel2].set_non_blocking(true);
-  }
-  client[channel].set_non_blocking(true); 
-
-  bool rdone = false;
-  bool wdone = false;
+  const int channel = base_channel % 65536;
+  const int channel2 = base_channel < 65536
+                     ? channel
+                     : (base_channel/65536) - 1;
 
   int mask = 0;
-  while((a < sendsize) || (b < recvsize)) {
-
+  while (mask != (MPWIDE_SOCKET_RDMASK|MPWIDE_SOCKET_WRMASK)) {
     int mode = selectSockets(channel,channel2,mask);
 
-    if(!rdone && (mode%2==1)) {
-      if((recvsize-b)) {
-        int n = client[channel2].irecv(recvbuf+b,min(tcpbuf_rsize,recvsize-b)); 
-        b += n;
-	    #if MONITORING == 1
-	    bytes_sent += n;
-	    #endif
-      }
-      if(!(recvsize-b)) {
-        mask++; //don't check for read anymore
-        rdone = true;
-      }
+    if(FLAG_CHECK(mode,MPWIDE_SOCKET_RDMASK)) {
+      int n = client[channel2].irecv(recvbuf + b, min(tcpbuf_rsize,recvsize - b));
+      b += n;
+      #if MONITORING == 1
+      bytes_sent += n;
+      #endif
+
+      if(b == recvsize)
+        mask |= MPWIDE_SOCKET_RDMASK; //don't check for read anymore
     }
 
-    if(!wdone && (mode/2==1)) {
-      if(sendsize-a) {
-        int n = client[channel].isend(sendbuf+a,min(tcpbuf_ssize,sendsize-a)); 
+    if(FLAG_CHECK(mode,MPWIDE_SOCKET_WRMASK)) {
+      int n = client[channel].isend(sendbuf + a, min(tcpbuf_ssize, sendsize - a));
+      a += n;
+      #if MONITORING == 1
+      bytes_sent += n;
+      #endif
 
-        a += n;
-        #if MONITORING == 1
-        bytes_sent += n;
-        #endif
-      }
-      if(!(sendsize-a)) {
-        mask += 2; //don't check for write anymore
-        wdone = true;
-      }
+      if(a == sendsize)
+        mask |= MPWIDE_SOCKET_WRMASK; //don't check for write anymore
     }
 
     #if PacingMode == 1
@@ -802,9 +774,6 @@ void* MPW_Relay(void* args)
   char* buf      = (char *) malloc(bufsize);
   char* buf2     = (char *) malloc(bufsize);
   
-  client[channel].set_non_blocking(true);   
-  client[channel2].set_non_blocking(true); 
-
   #if PERF_REPORT > 1
   cout << "Starting Relay Channel #" << channel << endl;
   #endif
@@ -916,12 +885,7 @@ void *MPW_TDynEx(void *args)
   char* recvbuf = ta->recvbuf;
   int channel = ta->channel % 65536; //send channel
 
-  int channel2 = channel; //recv channel
-  client[channel].set_non_blocking(true);
-  if(cycling) { 
-    channel2 = (ta->channel / 65536) - 1; 
-    client[channel2].set_non_blocking(true);
-  }
+  int channel2 = cycling ? (ta->channel / 65536) - 1 : channel; //recv channel
 
   int id = ta->thread_id;
   long long int numschannels = ta->numchannels;
