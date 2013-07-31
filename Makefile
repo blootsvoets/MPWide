@@ -8,6 +8,7 @@ INSTALL_PREFIX    = .
 
 Test_objects = Test.o
 PingPong_objects = PingPong.o
+TestConcurrent_objects = TestConcurrent.o
 Amuse_objects = amuse/AmuseAgent.o
 TestRestart_objects = TestRestart.o
 dg_objects   = DataGather.o
@@ -22,7 +23,7 @@ wcp_objects =  mpw-cp.o
 SO_EXT = so
 SHARED_LINK_FLAGS = -shared
 
-all : MPWPingPong MPWTest MPWTestRestart MPWDataGather MPWForwarder MPWFileCopy libMPW.a libMPW.$(SO_EXT)
+all : MPWTest MPWPingPong MPWTestConcurrent MPWTestRestart MPWDataGather MPWForwarder MPWFileCopy libMPW.a libMPW.$(SO_EXT)
 
 install: libMPW.a libMPW.$(SO_EXT) MPWForwarder
 	mkdir -p $(INSTALL_PREFIX)/lib
@@ -48,6 +49,9 @@ MPWTest: $(Test_objects) libMPW.a
 MPWPingPong: $(PingPong_objects) libMPW.a
 	$(LINK_EXE)
 
+MPWTestConcurrent: $(TestConcurrent_objects) libMPW.a
+	$(LINK_EXE)
+
 MPWAmuseAgent: $(Amuse_objects) libMPW.a
 	$(LINK_EXE)
 
@@ -64,9 +68,11 @@ MPWFileCopy: $(wcp_objects) libMPW.a
 	$(LINK_EXE)
 
 Test: Test.cpp
+TestConcurrent: TestConcurrent.cpp
 TestRestart: TestRestart.cpp
 Forwarder: Forwarder.cpp
 PingPong: PingPong.cpp
 
 clean:
-	rm -f *.o MPWTest MPWTestRestart MPWDataGather MPWForwarder MPWAmuseAgent MPWFileCopy libMPW.a libMPW.$(SO_EXT)* bin lib include PingPong
+	rm -f *.o MPWTest MPWPingPong MPWTestConcurrent MPWTestRestart MPWDataGather MPWForwarder MPWAmuseAgent MPWFileCopy libMPW.a libMPW.$(SO_EXT)* bin lib include
+
