@@ -174,18 +174,18 @@ int main(int argc, char** argv){
       }
     }
 
-    if(flag == 0) {
-      cout << "Closing and reopening channels." << endl;
-
-      if(threesites) {
-	MPW_CloseChannels(channels, size/2);
-	MPW_ReOpenChannels(channels, size/2);
-      }
-      else {
-        MPW_CloseChannels(channels, size);
-        MPW_ReOpenChannels(channels, size);
-      }
-    }
+//    if(flag == 0) {
+//      cout << "Closing and reopening channels." << endl;
+//
+//      if(threesites) {
+//	MPW_CloseChannels(channels, size/2);
+//	MPW_ReOpenChannels(channels, size/2);
+//      }
+//      else {
+//        MPW_CloseChannels(channels, size);
+//        MPW_ReOpenChannels(channels, size);
+//      }
+//    }
     if(flag == 1) {
       MPW_Finalize();
       return 1;
